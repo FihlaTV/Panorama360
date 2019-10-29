@@ -8,6 +8,10 @@ import java.io.File;
 
 
 public class UserPreferences {
+    private static final String PREF_EXP_COMP_TYPE = "exp_comp";
+    private static final String PREF_SEAM_TYPE = "seam_type";
+    private static final String PREF_WRAP_TYPE = "wrap_type";
+    private static final String PREF_DETECTOR_TYPE = "detector_type";
     private static final String PREF_ACTION_MODE = "action_mode";
     private static final String PREF_PICTURE_MODE = "picture_mode";
     private static final String PREF_PICTURE_QUALITY = "picture_quality";
@@ -30,7 +34,39 @@ public class UserPreferences {
     }
 
     public PictureMode getPictureMode() {
-        return PictureMode.stringToEnum(mPreferences.getString(PREF_PICTURE_MODE, PictureMode.auto.name()));
+        return PictureMode.stringToEnum(mPreferences.getString(PREF_PICTURE_MODE, PictureMode.AUTO.name()));
+    }
+
+    public String getWrapType() {
+        return mPreferences.getString(PREF_WRAP_TYPE, "spherical");
+    }
+
+    public void setWrapType(String wrapType) {
+        mPreferences.edit().putString(PREF_WRAP_TYPE, wrapType).apply();
+    }
+
+    public String getSeamType() {
+        return mPreferences.getString(PREF_SEAM_TYPE, "dp_color");
+    }
+
+    public void setSeamType(String seamType) {
+        mPreferences.edit().putString(PREF_SEAM_TYPE, seamType).apply();
+    }
+
+    public String getExpCompType() {
+        return mPreferences.getString(PREF_EXP_COMP_TYPE, "NO");
+    }
+
+    public void setExpCompType(String expCompType) {
+        mPreferences.edit().putString(PREF_EXP_COMP_TYPE, expCompType).apply();
+    }
+
+    public String getDetectorType() {
+        return mPreferences.getString(PREF_DETECTOR_TYPE, "orb");
+    }
+
+    public void setDetectorType(String detectorType) {
+        mPreferences.edit().putString(PREF_DETECTOR_TYPE, detectorType).apply();
     }
 
     public void setPictureMode(PictureMode pictureMode) {
@@ -38,7 +74,7 @@ public class UserPreferences {
     }
 
     public PictureQuality getPictureQuality() {
-        return PictureQuality.stringToEnum(mPreferences.getString(PREF_PICTURE_QUALITY, PictureQuality.LOW.name()));
+        return PictureQuality.stringToEnum(mPreferences.getString(PREF_PICTURE_QUALITY, PictureQuality.NORMAL.name()));
     }
 
     public void setPictureQuality(PictureQuality pictureQuality) {
@@ -73,4 +109,5 @@ public class UserPreferences {
     public void setLon(int lon) {
         mPreferences.edit().putInt(PREF_GRID_LON, lon).apply();
     }
+
 }

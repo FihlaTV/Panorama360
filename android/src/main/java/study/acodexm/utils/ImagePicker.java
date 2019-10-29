@@ -36,7 +36,9 @@ public class ImagePicker {
     }
 
     public static List<Mat> loadPictureParts(ArrayList<Integer> ids) {
-        return ids.stream().map(id -> bitmapToMat(ImageRW.loadImageExternal(id))).collect(Collectors.toList());
+        return ids.stream()
+                .map(id -> bitmapToMat(ImageRW.loadImageExternal(id)))
+                .collect(Collectors.toList());
     }
 
     private static List<Mat> loadAllPictureParts(PicturePosition position) {
@@ -47,40 +49,53 @@ public class ImagePicker {
         return parts;
     }
 
-    public static List<Mat> loadPictures(PictureMode pictureMode, PicturePosition instance) {
-        List<Mat> pictures = new ArrayList<>();
+    private static List<Mat> loadTestPictures() {
+        return ImageRW.loadTestImagesExternal().stream()
+                .map(ImagePicker::bitmapToMat)
+                .collect(Collectors.toList());
+    }
+
+    private static List<Mat> loadAllPictures(PicturePosition instance) {
+        return instance.getTakenPictures().stream()
+                .map(id -> bitmapToMat(ImageRW.loadImageExternal(id)))
+                .collect(Collectors.toList());
+    }
+
+    private static List<Mat> loadWidePictures(PicturePosition instance) {
+        Set<Integer> optimalIDS = maxArea(instance);
+        if (optimalIDS != null && optimalIDS.size() > 0)
+            return optimalIDS.stream()
+                    .map(id -> bitmapToMat(ImageRW.loadImageExternal(id)))
+                    .collect(Collectors.toList());
+        else
+            LOG.e(TAG, "WIDE_PICTURE loadPictures failed: ", new Throwable("empty list or null"));
+        return new ArrayList<>();
+    }
+
+    private static List<Mat> loadPanoramaPictures(PicturePosition instance) {
+        Set<Integer> longestIDS = maxLength(instance);
+        if (longestIDS != null && longestIDS.size() > 0)
+            return longestIDS.stream()
+                    .map(id -> bitmapToMat(ImageRW.loadImageExternal(id)))
+                    .collect(Collectors.toList());
+        else
+            LOG.e(TAG, "panorama loadPictures failed: ", new Throwable("empty list or null"));
+        return new ArrayList<>();
+
+    }
+
+    public static List<Mat> loadPictures(PictureMode pictureMode, PicturePosition instance, boolean isInTestMode) {
+        if (isInTestMode) return loadTestPictures();
         switch (pictureMode) {
-            case auto:
-                for (int id : instance.getTakenPictures())
-                    pictures.add(bitmapToMat(ImageRW.loadImageExternal(id)));
-                break;
-            case multithreaded:
+            case MULTITHREADED:
                 return loadAllPictureParts(instance);
-            case panorama:
-                Set<Integer> longestIDS = maxLength(instance);
-                if (longestIDS != null && longestIDS.size() > 0)
-                    for (int id : longestIDS) {
-                        pictures.add(bitmapToMat(ImageRW.loadImageExternal(id)));
-                    }
-                else
-                    LOG.e(TAG, "panorama loadPictures failed: ", new Throwable("empty list or null"));
-                break;
-            case widePicture:
-                Set<Integer> optimalIDS = maxArea(instance);
-                if (optimalIDS != null && optimalIDS.size() > 0)
-                    for (int id : optimalIDS) {
-                        pictures.add(bitmapToMat(ImageRW.loadImageExternal(id)));
-                    }
-                else
-                    LOG.e(TAG, "widePicture loadPictures failed: ", new Throwable("empty list or null"));
-                break;
-            case picture360:
-                //this will work only when whole sphere is filled with pictures
-                for (int id : instance.getTakenPictures())
-                    pictures.add(bitmapToMat(ImageRW.loadImageExternal(id)));
-                break;
+            case PANORAMA:
+                return loadPanoramaPictures(instance);
+            case WIDE_PICTURE:
+                return loadWidePictures(instance);
+            default:
+                return loadAllPictures(instance);
         }
-        return pictures;
     }
 
     /**

@@ -1,7 +1,6 @@
 package study.acodexm;
 
 
-import acodexm.panorama.R;
 import android.content.Intent;
 import android.graphics.PixelFormat;
 import android.hardware.SensorManager;
@@ -19,13 +18,32 @@ import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.SurfaceView;
 import android.view.View;
-import android.widget.*;
+import android.widget.ArrayAdapter;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
+import android.widget.Spinner;
+import android.widget.Switch;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import com.badlogic.gdx.backends.android.AndroidApplication;
+import com.badlogic.gdx.backends.android.AndroidApplicationConfiguration;
+
+import org.opencv.core.Mat;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Timer;
+import java.util.TimerTask;
+
+import acodexm.panorama.R;
 import butterknife.BindView;
 import butterknife.ButterKnife;
 import butterknife.OnClick;
-import com.badlogic.gdx.backends.android.AndroidApplication;
-import com.badlogic.gdx.backends.android.AndroidApplicationConfiguration;
-import org.opencv.core.Mat;
+import butterknife.OnItemSelected;
 import study.acodexm.control.AndroidRotationVector;
 import study.acodexm.control.AndroidSettingsControl;
 import study.acodexm.control.CameraControl;
@@ -34,12 +52,19 @@ import study.acodexm.gallery.GalleryActivity;
 import study.acodexm.orientationProvider.ImprovedOrientationSensor2Provider;
 import study.acodexm.orientationProvider.OrientationProvider;
 import study.acodexm.representation.MatrixF4x4;
-import study.acodexm.settings.*;
+import study.acodexm.settings.ActionMode;
+import study.acodexm.settings.GridSize;
+import study.acodexm.settings.PictureMode;
+import study.acodexm.settings.PictureQuality;
+import study.acodexm.settings.SettingsControl;
+import study.acodexm.settings.UserPreferences;
+import study.acodexm.utils.DetectorType;
+import study.acodexm.utils.ExpCompType;
 import study.acodexm.utils.ImagePicker;
 import study.acodexm.utils.ImageRW;
 import study.acodexm.utils.LOG;
-
-import java.util.*;
+import study.acodexm.utils.SeamType;
+import study.acodexm.utils.WrapType;
 
 public class MainActivity extends AndroidApplication implements ViewControl, NavigationView.OnNavigationItemSelectedListener {
     private static final String TAG = MainActivity.class.getSimpleName();
@@ -55,8 +80,24 @@ public class MainActivity extends AndroidApplication implements ViewControl, Nav
         System.loadLibrary("MyLib");
     }
 
+    @BindView(R.id.picture_settings)
+    LinearLayout pictureSettings;
+    @BindView(R.id.advanced_settings)
+    LinearLayout advancedSettings;
+    @BindView(R.id.exp_comp_select)
+    Spinner expCompSelect;
+    @BindView(R.id.picture_mode)
+    Spinner modeSelect;
+    @BindView(R.id.wrap_select)
+    Spinner wrapSelect;
+    @BindView(R.id.seam_select)
+    Spinner seamSelect;
+    @BindView(R.id.detector_select)
+    Spinner detectorSelect;
     @BindView(R.id.capture)
     ImageView captureBtn;
+    @BindView(R.id.settings)
+    ImageView settingsBtn;
     @BindView(R.id.scope)
     ImageView scope;
     @BindView(R.id.refresh_picture)
@@ -67,18 +108,10 @@ public class MainActivity extends AndroidApplication implements ViewControl, Nav
     ImageView deleteFolderBtn;
     @BindView(R.id.mode_auto)
     Switch mSwitchAuto;
+    @BindView(R.id.mode_test)
+    Switch mSwitchTest;
     @BindView(R.id.mode_manual)
     Switch mSwitchManual;
-    @BindView(R.id.picture_panorama)
-    Switch mSwitchPanorama;
-    @BindView(R.id.picture_auto)
-    Switch mSwitchAutoPicture;
-    @BindView(R.id.picture_multithreaded)
-    Switch mSwitchMultithreaded;
-    @BindView(R.id.picture_wide)
-    Switch mSwitchWide;
-    @BindView(R.id.picture_360)
-    Switch mSwitch360;
     @BindView(R.id.quality_high)
     Switch mSwitchHigh;
     @BindView(R.id.quality_low)
@@ -109,6 +142,10 @@ public class MainActivity extends AndroidApplication implements ViewControl, Nav
     private boolean partProcessing = false;
     private PicturePosition mPicturePosition;
     private OrientationProvider orientationProvider;
+    private String wrapType;
+    private String detectorType;
+    private String seamType;
+    private String expCompType;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -157,7 +194,9 @@ public class MainActivity extends AndroidApplication implements ViewControl, Nav
         //delete files from temporary picture folder
         ImageRW.deleteTempFiles();
         ImageRW.deletePartFiles();
-
+        //spinner init
+        initSpinners();
+        //init grid
         mPicturePosition = PicturePosition.getInstance(mGridSize.getLAT(), mGridSize.getLON(), true);
 
         imageHandler = new Thread(new Runnable() {
@@ -184,6 +223,38 @@ public class MainActivity extends AndroidApplication implements ViewControl, Nav
                 }
             }
         });
+    }
+
+    private void initSpinners() {
+        // wrapping type selector
+        ArrayAdapter<String> wrapAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, WrapType.items);
+        wrapAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        wrapSelect.setAdapter(wrapAdapter);
+        wrapType = mPreferences.getWrapType();
+        wrapSelect.setSelection(WrapType.getPosition(wrapType));
+        // detector type selector
+        ArrayAdapter<String> detectorAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, DetectorType.items);
+        detectorAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        detectorSelect.setAdapter(detectorAdapter);
+        detectorType = mPreferences.getDetectorType();
+        detectorSelect.setSelection(DetectorType.getPosition(detectorType));
+        // seam type selector
+        ArrayAdapter<String> seamAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, SeamType.items);
+        seamAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        seamSelect.setAdapter(seamAdapter);
+        seamType = mPreferences.getSeamType();
+        seamSelect.setSelection(SeamType.getPosition(seamType));
+        // exposure compensator type selector
+        ArrayAdapter<String> expCompAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, ExpCompType.items);
+        expCompAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        expCompSelect.setAdapter(expCompAdapter);
+        expCompType = mPreferences.getExpCompType();
+        expCompSelect.setSelection(ExpCompType.getPosition(expCompType));
+        // picture mode selector
+        ArrayAdapter<String> modeAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, PictureMode.getValues());
+        modeAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        modeSelect.setAdapter(modeAdapter);
+        modeSelect.setSelection(PictureMode.enumToInt(mPreferences.getPictureMode()));
     }
 
     @Override
@@ -218,7 +289,8 @@ public class MainActivity extends AndroidApplication implements ViewControl, Nav
                     case PROCESS_FINAL_IMAGES: {
                         LOG.s(TAG, "PROCESS_FINAL_IMAGES");
                         MainActivity.this.isNotSaving = false;
-                        new Thread(MainActivity.this.processPicture(PictureMode.intToEnum(msg.arg1))).start();
+                        MainActivity.this.orientationProvider.stop();
+                        new Thread(MainActivity.this.processPicture(PictureMode.intToEnum(msg.arg1), msg.arg2 == 1)).start();
                         new Thread(MainActivity.this.getProgress()).start();
                         break;
                     }
@@ -240,7 +312,7 @@ public class MainActivity extends AndroidApplication implements ViewControl, Nav
                 return true;
             }
         });
-        if (mPreferences.getPictureMode() == PictureMode.multithreaded)
+        if (mPreferences.getPictureMode() == PictureMode.MULTITHREADED)
             threadHandler.sendEmptyMessage(START_PROCESSING);
     }
 
@@ -316,20 +388,15 @@ public class MainActivity extends AndroidApplication implements ViewControl, Nav
      *
      * @param pictureMode
      */
-    private Runnable processPicture(final PictureMode pictureMode) {
-        final long time = System.currentTimeMillis();
+    private Runnable processPicture(final PictureMode pictureMode, boolean isInTestMode) {
         return () -> {
-            post(LOG.r(TAG, "processPicture BEGIN", 0));
-            long t = System.currentTimeMillis();
             final List<Mat> listImage;
             try {
-                listImage = ImagePicker.loadPictures(pictureMode, mPicturePosition);
+                listImage = ImagePicker.loadPictures(pictureMode, mPicturePosition, isInTestMode);
             } catch (Exception e) {
                 post(LOG.r(TAG, "run: loadPictures failed", e));
                 return;
             }
-            post(LOG.r("loadPictureParts", (System.currentTimeMillis() - t) + "", (System.currentTimeMillis() - time)));
-            t = System.currentTimeMillis();
             try {
                 int images = listImage.size();
                 if (images > 0) {
@@ -340,42 +407,37 @@ public class MainActivity extends AndroidApplication implements ViewControl, Nav
                     Mat result = new Mat();
                     // Call the OpenCV C++ Code to perform stitching process
                     try {
-                        String[] args = {pictureMode.toString()};
+                        String[] args = {
+                                pictureMode.toString().toLowerCase(),
+                                detectorType.toLowerCase(),
+                                wrapType.toLowerCase(),
+                                seamType.toLowerCase(),
+                                expCompType.toLowerCase()
+                        };
                         NativePanorama.processPanorama(tempObjAddress, result.getNativeObjAddr(), args);
-                        post(LOG.r("processPanorama", (System.currentTimeMillis() - t) + "", (System.currentTimeMillis() - time)));
-                        t = System.currentTimeMillis();
                         //save to external storage
                         boolean isSaved = false;
                         if (!result.empty())
                             isSaved = ImageRW.saveResultImageExternal(result);
-                        post(LOG.r("saveResultImageExternal", (System.currentTimeMillis() - t) + "", (System.currentTimeMillis() - time)));
-                        t = System.currentTimeMillis();
                         showToastRunnable(getString(R.string.msg_is_saved) + isSaved);
                     } catch (Exception e) {
                         post(LOG.r(TAG, "native processPanorama not working ", e));
                     }
-
                     for (Mat mat : listImage) mat.release();
                     listImage.clear();
-                    post(LOG.r("clearMemoListImage", (System.currentTimeMillis() - t) + "", (System.currentTimeMillis() - time)));
-
                 }
             } catch (Exception e) {
                 e.printStackTrace();
             }
             isNotSaving = true;
-            post(LOG.r("processPicture", "END", (System.currentTimeMillis() - time)));
+            orientationProvider.start();
             post(LOG.cpJ());
         };
 
     }
 
     private Runnable processPartPicture(final ArrayList<Integer> ids) {
-        final long time = System.currentTimeMillis();
         return () -> {
-            post(LOG.r(TAG, "processPartPicture BEGIN", 0));
-            long t = System.currentTimeMillis();
-
             final List<Mat> listImage;
             try {
                 listImage = ImagePicker.loadPictureParts(ids);
@@ -383,12 +445,9 @@ public class MainActivity extends AndroidApplication implements ViewControl, Nav
                 post(LOG.r(TAG, "run: loadPictureParts failed", e));
                 return;
             }
-            post(LOG.r("loadPictureParts", (System.currentTimeMillis() - t) + "", (System.currentTimeMillis() - time)));
-
             try {
                 int images = listImage.size();
                 if (images > 0) {
-                    post(LOG.r(TAG, "Pictures taken: " + images));
                     long[] tempObjAddress = new long[images];
                     for (int i = 0; i < images; i++) {
                         tempObjAddress[i] = listImage.get(i).getNativeObjAddr();
@@ -396,16 +455,12 @@ public class MainActivity extends AndroidApplication implements ViewControl, Nav
                     Mat result = new Mat();
                     //Call the OpenCV C++ Code to perform stitching process
                     try {
-                        String[] args = {"part"};
-                        t = System.currentTimeMillis();
+                        String[] args = {"part", "orb", "spherical", "dp_color", "no"};
                         NativePanorama.processPanorama(tempObjAddress, result.getNativeObjAddr(), args);
-                        post(LOG.r("processPanorama", (System.currentTimeMillis() - t) + "", (System.currentTimeMillis() - time)));
-                        t = System.currentTimeMillis();
                         //save to external storage
                         boolean isSaved = false;
                         if (!result.empty())
                             isSaved = ImageRW.savePartResultImageExternal(result);
-                        post(LOG.r("savePartResultImageExternal", (System.currentTimeMillis() - t) + "", (System.currentTimeMillis() - time)));
 
                         Message message = new Message();
                         message.what = SAVED_PART_IMAGE;
@@ -417,21 +472,15 @@ public class MainActivity extends AndroidApplication implements ViewControl, Nav
                     } catch (Exception e) {
                         post(LOG.r(TAG, "native processPanorama not working ", e));
                     }
-                    t = System.currentTimeMillis();
                     for (Mat mat : listImage) mat.release();
                     listImage.clear();
-                    post(LOG.r("partClearMemoListImage", (System.currentTimeMillis() - t) + "", (System.currentTimeMillis() - time)));
-
-
                 }
             } catch (Exception e) {
                 e.printStackTrace();
             }
             partProcessing = false;
-            post(LOG.r("processPartPicture", "END", (System.currentTimeMillis() - time)));
             post(LOG.cpJ());
         };
-
     }
 
     public void showToastRunnable(final String message) {
@@ -459,7 +508,7 @@ public class MainActivity extends AndroidApplication implements ViewControl, Nav
             mProgressBar.setVisibility(View.VISIBLE);
         });
         final long time = System.currentTimeMillis();
-
+        post(LOG.r("getProgress", "START", (System.currentTimeMillis() - time)));
         return () -> {
             while (!isNotSaving) {
                 int progress = NativePanorama.getProgress();
@@ -471,6 +520,7 @@ public class MainActivity extends AndroidApplication implements ViewControl, Nav
                     e.printStackTrace();
                 }
             }
+            post(LOG.r("getProgress", "END", (System.currentTimeMillis() - time)));
             post(() -> {
                 LOG.s(TAG, "hideProcessingDialog");
                 mCameraControl.startPreview();
@@ -487,6 +537,7 @@ public class MainActivity extends AndroidApplication implements ViewControl, Nav
     private Runnable getProgressPart() {
         LOG.s(TAG, "getProgressPart");
         final long time = System.currentTimeMillis();
+        post(LOG.r("getProgressPart", "START", (System.currentTimeMillis() - time)));
         return () -> {
             while (partProcessing) {
                 int progress = NativePanorama.getProgress();
@@ -498,6 +549,7 @@ public class MainActivity extends AndroidApplication implements ViewControl, Nav
                     e.printStackTrace();
                 }
             }
+            post(LOG.r("getProgressPart", "END", (System.currentTimeMillis() - time)));
         };
     }
 
@@ -505,33 +557,22 @@ public class MainActivity extends AndroidApplication implements ViewControl, Nav
         switch (mPreferences.getActionMode()) {
             case Manual:
                 mSwitchManual.setChecked(true);
+                pictureSettings.setVisibility(View.VISIBLE);
                 break;
             case FullAuto:
                 mSwitchAuto.setChecked(true);
+                pictureSettings.setVisibility(View.VISIBLE);
                 break;
-        }
-        switch (mPreferences.getPictureMode()) {
-            case auto:
-                mSwitchAutoPicture.setChecked(true);
-                break;
-            case multithreaded:
-                mSwitchMultithreaded.setChecked(true);
-                break;
-            case panorama:
-                mSwitchPanorama.setChecked(true);
-                break;
-            case widePicture:
-                mSwitchWide.setChecked(true);
-                break;
-            case picture360:
-                mSwitch360.setChecked(true);
+            case Test:
+                mSwitchTest.setChecked(true);
+                pictureSettings.setVisibility(View.GONE);
                 break;
         }
         switch (mPreferences.getPictureQuality()) {
-            case LOW:
+            case NORMAL:
                 mSwitchLow.setChecked(true);
                 break;
-            case VERY_LOW:
+            case LOW:
                 mSwitchVeryLow.setChecked(true);
                 break;
             case HIGH:
@@ -549,11 +590,15 @@ public class MainActivity extends AndroidApplication implements ViewControl, Nav
             case ready:
                 switch (mSettingsControl.getActionMode()) {
                     case FullAuto:
+                        captureBtn.setVisibility(View.VISIBLE);
                         captureBtn.setBackground(ContextCompat.getDrawable(this, R.drawable.ready_auto));
                         break;
                     case Manual:
+                        captureBtn.setVisibility(View.VISIBLE);
                         captureBtn.setBackground(ContextCompat.getDrawable(this, R.drawable.ready));
                         break;
+                    case Test:
+                        captureBtn.setVisibility(View.GONE);
                 }
                 break;
             case recording:
@@ -599,6 +644,10 @@ public class MainActivity extends AndroidApplication implements ViewControl, Nav
 
     @OnClick(R.id.capture)
     void onCaptureClickListener() {
+        if (mSettingsControl.getActionMode() == ActionMode.Test) {
+            showToast(R.string.msg_press_save_for_compute_test_images);
+            return;
+        }
         if (isNotSaving)
             if (mShutterState == ShutterState.recording
                     || (mShutterState == ShutterState.ready
@@ -632,24 +681,13 @@ public class MainActivity extends AndroidApplication implements ViewControl, Nav
         if (isNotSaving) {
             Message message = new Message();
             message.what = PROCESS_FINAL_IMAGES;
-            showToast(getString(R.string.msg_save));
-            switch (mSettingsControl.getPictureMode()) {
-                case auto:
-                    message.arg1 = 0;
-                    break;
-                case multithreaded:
-                    message.arg1 = 1;
-                    break;
-                case panorama:
-                    message.arg1 = 2;
-                    break;
-                case widePicture:
-                    message.arg1 = 3;
-                    break;
-                case picture360:
-                    message.arg1 = 4;
-                    break;
+            if (mSettingsControl.getActionMode() == ActionMode.Test) {
+                showToast(getString(R.string.msg_process_test_images));
+                message.arg2 = 1;
+            } else {
+                showToast(getString(R.string.msg_save));
             }
+            message.arg1 = PictureMode.enumToInt(mSettingsControl.getPictureMode());
             threadHandler.sendMessage(message);
         } else showToast(R.string.msg_wait);
     }
@@ -665,6 +703,14 @@ public class MainActivity extends AndroidApplication implements ViewControl, Nav
         return false;
     }
 
+    @OnClick(R.id.settings)
+    void onSettingsClick() {
+        DrawerLayout navDrawer = findViewById(R.id.drawer_layout);
+        // If the navigation drawer is not open then open it, if its already open then close it.
+        if (!navDrawer.isDrawerOpen(GravityCompat.START)) navDrawer.openDrawer(GravityCompat.START);
+        else navDrawer.closeDrawer(GravityCompat.END);
+    }
+
     @OnClick(R.id.delete_folder)
     void onDeleteFolder() {
         if (isNotSaving) {
@@ -677,121 +723,103 @@ public class MainActivity extends AndroidApplication implements ViewControl, Nav
         }
     }
 
+    @OnItemSelected(R.id.picture_mode)
+    void modeSelected(Spinner spinner, int position) {
+        if (isNotSaving) {
+            boolean shouldRecreate = false;
+            if (PictureMode.intToEnum(position) != mPreferences.getPictureMode())
+                shouldRecreate = true;
+            if (PictureMode.intToEnum(position) == PictureMode.PICTURE_360) {
+                mPreferences.setLat(10);
+                mPreferences.setLon(5);
+            } else if (PictureMode.intToEnum(position) == PictureMode.PANORAMA) {
+                mPreferences.setLat(10);
+                mPreferences.setLon(3);
+            } else {
+                mPreferences.setLat(10);
+                mPreferences.setLon(7);
+            }
+            if (PictureMode.intToEnum(position) == PictureMode.TEST) {
+                advancedSettings.setVisibility(View.VISIBLE);
+            } else {
+                advancedSettings.setVisibility(View.GONE);
+            }
+            mSettingsControl.setPictureMode(PictureMode.intToEnum(position));
+            mPreferences.setPictureMode(PictureMode.intToEnum(position));
+            setCaptureBtnImage();
+            if (shouldRecreate) recreate();
+        } else {
+            showToast(R.string.msg_wait);
+            spinner.setSelection(PictureMode.enumToInt(mPreferences.getPictureMode()));
+        }
+    }
+
+    @OnItemSelected(R.id.exp_comp_select)
+    void expCompSelected(Spinner spinner, int position) {
+        expCompType = ExpCompType.get(position);
+        mPreferences.setExpCompType(expCompType);
+    }
+
+    @OnItemSelected(R.id.seam_select)
+    void seamSelected(Spinner spinner, int position) {
+        seamType = SeamType.get(position);
+        mPreferences.setSeamType(seamType);
+    }
+
+    @OnItemSelected(R.id.wrap_select)
+    void wrapSelected(Spinner spinner, int position) {
+        wrapType = WrapType.get(position);
+        mPreferences.setWrapType(wrapType);
+    }
+
+    @OnItemSelected(R.id.detector_select)
+    void detectorSelected(Spinner spinner, int position) {
+        detectorType = DetectorType.get(position);
+        mPreferences.setDetectorType(detectorType);
+    }
+
     @OnClick(R.id.mode_auto)
     void onSwitchAuto() {
         if (isNotSaving) {
             mPreferences.setActionMode(ActionMode.FullAuto);
-            mPreferences.setLat(10);
-            mPreferences.setLon(7);
             mSettingsControl.setActionMode(ActionMode.FullAuto);
             mSwitchManual.setChecked(false);
+            mSwitchTest.setChecked(false);
+            pictureSettings.setVisibility(View.VISIBLE);
             setCaptureBtnImage();
             if (!mSwitchAuto.isChecked())
                 mSwitchAuto.setChecked(true);
-            recreate();
         } else showToast(R.string.msg_wait);
     }
 
     @OnClick(R.id.mode_manual)
     void onSwitchManual() {
         if (isNotSaving)
-            if (mSwitchAuto.isChecked()) {
+            if (mSwitchAuto.isChecked() || mSwitchTest.isChecked()) {
                 mPreferences.setActionMode(ActionMode.Manual);
-                mPreferences.setLat(10);
-                mPreferences.setLon(7);
                 mSettingsControl.setActionMode(ActionMode.Manual);
                 mSwitchAuto.setChecked(false);
+                mSwitchTest.setChecked(false);
+                pictureSettings.setVisibility(View.VISIBLE);
                 setCaptureBtnImage();
             } else onSwitchAuto();
         else showToast(R.string.msg_wait);
     }
 
-    @OnClick(R.id.picture_auto)
-    void onSwitchAutoPanorama() {
-        if (isNotSaving) {
-            threadHandler.sendEmptyMessage(STOP_PROCESSING);
-            mPreferences.setPictureMode(PictureMode.auto);
-            mPreferences.setLat(10);
-            mPreferences.setLon(7);
-            mSettingsControl.setPictureMode(PictureMode.auto);
-            mSwitchPanorama.setChecked(false);
-            mSwitchMultithreaded.setChecked(false);
-            mSwitchWide.setChecked(false);
-            mSwitch360.setChecked(false);
-            if (!mSwitchAutoPicture.isChecked())
-                mSwitchAutoPicture.setChecked(true);
-            recreate();
-        } else showToast(R.string.msg_wait);
-    }
-
-    @OnClick(R.id.picture_multithreaded)
-    void onSwitchMultithreadedPanorama() {
-        if (isNotSaving) {
-            if (mSwitchPanorama.isChecked() || mSwitchMultithreaded.isChecked() || mSwitch360.isChecked() || mSwitchWide.isChecked()) {
-                mPreferences.setPictureMode(PictureMode.multithreaded);
-                mPreferences.setLat(10);
-                mPreferences.setLon(7);
-                mSettingsControl.setPictureMode(PictureMode.multithreaded);
-                mSwitchPanorama.setChecked(false);
-                mSwitchWide.setChecked(false);
-                mSwitchAutoPicture.setChecked(false);
-                mSwitch360.setChecked(false);
-                threadHandler.sendEmptyMessage(START_PROCESSING);
-                recreate();
-            } else onSwitchAutoPanorama();
-        } else showToast(R.string.msg_wait);
-    }
-
-    @OnClick(R.id.picture_panorama)
-    void onSwitchPanorama() {
+    @OnClick(R.id.mode_test)
+    void onSwitchTest() {
         if (isNotSaving)
-            if (mSwitchPanorama.isChecked() || mSwitchMultithreaded.isChecked() || mSwitch360.isChecked() || mSwitchWide.isChecked()) {
-                mPreferences.setPictureMode(PictureMode.panorama);
-                mPreferences.setLat(10);
-                mPreferences.setLon(3);
-                mSettingsControl.setPictureMode(PictureMode.panorama);
-                mSwitchAutoPicture.setChecked(false);
-                mSwitchMultithreaded.setChecked(false);
-                mSwitchWide.setChecked(false);
-                mSwitch360.setChecked(false);
-                recreate();
-            } else onSwitchAutoPanorama();
+            if (mSwitchAuto.isChecked() || mSwitchManual.isChecked()) {
+                mPreferences.setActionMode(ActionMode.Test);
+                mSettingsControl.setActionMode(ActionMode.Test);
+                mSwitchAuto.setChecked(false);
+                mSwitchManual.setChecked(false);
+                pictureSettings.setVisibility(View.GONE);
+                setCaptureBtnImage();
+            } else onSwitchAuto();
         else showToast(R.string.msg_wait);
     }
 
-    @OnClick(R.id.picture_wide)
-    void onSwitchWide() {
-        if (isNotSaving)
-            if (mSwitchPanorama.isChecked() || mSwitchMultithreaded.isChecked() || mSwitch360.isChecked() || mSwitchWide.isChecked()) {
-                mPreferences.setPictureMode(PictureMode.widePicture);
-                mPreferences.setLat(10);
-                mPreferences.setLon(7);
-                mSettingsControl.setPictureMode(PictureMode.widePicture);
-                mSwitchAutoPicture.setChecked(false);
-                mSwitchMultithreaded.setChecked(false);
-                mSwitchPanorama.setChecked(false);
-                mSwitch360.setChecked(false);
-                recreate();
-            } else onSwitchAutoPanorama();
-        else showToast(R.string.msg_wait);
-    }
-
-    @OnClick(R.id.picture_360)
-    void onSwitch360() {
-        if (isNotSaving)
-            if (mSwitchPanorama.isChecked() || mSwitchMultithreaded.isChecked() || mSwitch360.isChecked() || mSwitchWide.isChecked()) {
-                mPreferences.setPictureMode(PictureMode.picture360);
-                mPreferences.setLat(10);
-                mPreferences.setLon(5);
-                mSettingsControl.setPictureMode(PictureMode.picture360);
-                mSwitchMultithreaded.setChecked(false);
-                mSwitchAutoPicture.setChecked(false);
-                mSwitchWide.setChecked(false);
-                mSwitchPanorama.setChecked(false);
-                recreate();
-            } else onSwitchAutoPanorama();
-        else showToast(R.string.msg_wait);
-    }
 
     @OnClick(R.id.quality_high)
     void onSwitchHigh() {
@@ -809,8 +837,8 @@ public class MainActivity extends AndroidApplication implements ViewControl, Nav
     @OnClick(R.id.quality_low)
     void onSwitchLow() {
         if (isNotSaving) {
-            mPreferences.setPictureQuality(PictureQuality.LOW);
-            mSettingsControl.setPictureQuality(PictureQuality.LOW);
+            mPreferences.setPictureQuality(PictureQuality.NORMAL);
+            mSettingsControl.setPictureQuality(PictureQuality.NORMAL);
             mSwitchHigh.setChecked(false);
             mSwitchVeryLow.setChecked(false);
             if (!mSwitchLow.isChecked())
@@ -824,8 +852,8 @@ public class MainActivity extends AndroidApplication implements ViewControl, Nav
     void onSwitchVeryLow() {
         if (isNotSaving) {
             if (mSwitchLow.isChecked() || mSwitchHigh.isChecked()) {
-                mPreferences.setPictureQuality(PictureQuality.VERY_LOW);
-                mSettingsControl.setPictureQuality(PictureQuality.VERY_LOW);
+                mPreferences.setPictureQuality(PictureQuality.LOW);
+                mSettingsControl.setPictureQuality(PictureQuality.LOW);
                 mSwitchHigh.setChecked(false);
                 mSwitchLow.setChecked(false);
                 recreate();
